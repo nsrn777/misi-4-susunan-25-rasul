@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Misi 4: Susunan 25 Nama Rasul - Ciptaan Ustazah Nisrin</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Poppins & Fredoka) -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- MediaPipe Libraries via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Fredoka', 'Poppins', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        /* Glassmorphism Styling */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 20px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(8px);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .glass-card:hover, .glass-card.hovered {
+            transform: translateY(-6px) scale(1.03);
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.25);
+            border-color: #3b82f6;
+        }
+
+        /* Video feed mirroring */
+        .mirror {
+            transform: scaleX(-1);
+        }
+
+        /* Shake animation for wrong answer */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-12px); }
+            40%, 80% { transform: translateX(12px); }
+        }
+        .animate-shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        /* Pulse animation for correct answer */
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { box-shadow: 0 0 0 25px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+        .pulse-correct {
+            animation: pulse-green 0.6s ease-out;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.6);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-800 h-screen w-screen overflow-hidden flex flex-col justify-between relative">
+
+    <!-- BACKGROUND WEBCAM FEED & HAND CANVAS OVERLAY -->
+    <div class="fixed inset-0 w-full h-full z-0 overflow-hidden bg-slate-950">
+        <video id="webcam" class="absolute inset-0 w-full h-full object-cover mirror hidden" playsinline></video>
+        <canvas id="hand-canvas" class="absolute inset-0 w-full h-full object-cover mirror z-10"></canvas>
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/60 z-10 pointer-events-none"></div>
+    </div>
+
+    <!-- CUSTOM GESTURE VIRTUAL CURSOR WITH DWELL PROGRESS RING -->
+    <div id="virtual-cursor" class="fixed z-50 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 hidden">
+        <svg class="w-16 h-16" viewBox="0 0 50 50">
+            <!-- Progress Ring for Dwell -->
+            <circle id="cursor-progress" cx="25" cy="25" r="20" stroke="#3b82f6" stroke-width="4" fill="none"
+                    stroke-dasharray="125.6" stroke-dashoffset="125.6" stroke-linecap="round" 
+                    transform="rotate(-90 25 25)" class="transition-all duration-75" />
+            <!-- Inner Cursor Dot -->
+            <circle id="cursor-dot" cx="25" cy="25" r="8" fill="#e0f2fe" stroke="#0284c7" stroke-width="3" class="shadow-lg"/>
+        </svg>
+        <div id="cursor-label" class="text-[10px] font-bold text-center bg-blue-600 text-white rounded-full px-2 py-0.5 shadow mt-1 whitespace-nowrap">
+            Telunjuk
+        </div>
+    </div>
+
+    <!-- MAIN WRAPPER OVERLAY -->
+    <div class="relative z-20 w-full h-full flex flex-col justify-between p-4 md:p-6">
+
+        <!-- HEADER / NAVIGATION BAR -->
+        <header class="w-full max-w-5xl mx-auto flex items-center justify-between glass-panel rounded-2xl px-5 py-3 shadow-xl">
+            <div class="flex items-center space-x-3">
+                <div class="bg-gradient-to-br from-emerald-400 to-teal-600 p-2.5 rounded-xl text-white shadow-md">
+                    <i class="fa-solid fa-book-quran text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-emerald-600 to-teal-800 bg-clip-text text-transparent">
+                        MISI 4: SUSUNAN 25 RASUL
+                    </h1>
+                    <p class="text-xs font-semibold text-emerald-700">Pendidikan Islam Tahun 4</p>
+                </div>
+            </div>
+
+            <!-- HUD (Scores, Timer, Lives) - Visible during Game -->
+            <div id="hud" class="hidden flex items-center space-x-4 md:space-x-8">
+                <!-- Nyawa / Lives -->
+                <div class="flex items-center space-x-1 bg-red-100/90 px-3 py-1.5 rounded-xl border border-red-300 shadow-inner">
+                    <i class="fa-solid fa-heart text-red-500 text-lg md:text-xl" id="heart-1"></i>
+                    <i class="fa-solid fa-heart text-red-500 text-lg md:text-xl" id="heart-2"></i>
+                    <i class="fa-solid fa-heart text-red-500 text-lg md:text-xl" id="heart-3"></i>
+                </div>
+
+                <!-- Pemasa / Timer -->
+                <div class="flex items-center space-x-2 bg-amber-100/90 px-3.5 py-1.5 rounded-xl border border-amber-300 shadow-inner">
+                    <i class="fa-solid fa-stopwatch text-amber-600 text-xl animate-pulse"></i>
+                    <span id="timer-display" class="font-bold text-lg md:text-xl text-amber-800 w-8 text-center">60</span>
+                </div>
+
+                <!-- Skor / Score -->
+                <div class="flex items-center space-x-2 bg-blue-100/90 px-4 py-1.5 rounded-xl border border-blue-300 shadow-inner">
+                    <i class="fa-solid fa-star text-amber-500 text-xl"></i>
+                    <span id="score-display" class="font-bold text-lg md:text-xl text-blue-900">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- MENU UTAMA / MAIN MENU SCREEN -->
+        <main id="main-menu" class="w-full max-w-2xl mx-auto glass-panel rounded-3xl p-6 md:p-8 my-auto text-center shadow-2xl flex flex-col items-center">
+            <div class="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-600 mb-4 ring-4 ring-emerald-400/40 animate-bounce">
+                <i class="fa-solid fa-hand-pointer text-4xl"></i>
+            </div>
+            
+            <h2 class="text-3xl md:text-4xl font-extrabold text-slate-800 mb-2">Selamat Datang ke Misi 4!</h2>
+            <p class="text-slate-600 text-sm md:text-base max-w-md mb-6">
+                Uji kefahaman anda dalam menyusun urutan 25 Nama Rasul menggunakan kawalan <strong class="text-emerald-700">Isyarat Tangan Webcam</strong> atau sentuhan/tetikus!
+            </p>
+
+            <!-- Instructions Box -->
+            <div class="w-full bg-slate-50/90 rounded-2xl p-4 text-left border border-slate-200 mb-6 space-y-2 text-xs md:text-sm shadow-inner">
+                <p class="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                    <i class="fa-solid fa-circle-info text-blue-500"></i> Cara Bermain dengan Kamera:
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div class="flex items-start gap-2 bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                        <span class="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded text-xs">1</span>
+                        <span><strong>Isyarat Pinch:</strong> Temukan hujung Ibu Jari & Telunjuk untuk tekan/leret kad.</span>
+                    </div>
+                    <div class="flex items-start gap-2 bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                        <span class="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded text-xs">2</span>
+                        <span><strong>Dwell (Tahan):</strong> Halakan kursor telunjuk pada kad selama 1 saat.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Start Controls -->
+            <div class="flex flex-col sm:flex-row gap-4 w-full justify-center">
+                <button id="btn-start-cam" class="interactive-btn flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-3.5 px-6 rounded-2xl shadow-lg hover:shadow-xl transition transform active:scale-95 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-camera text-xl"></i> Main Dengan Kamera
+                </button>
+                <button id="btn-start-mouse" class="interactive-btn flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-3.5 px-6 rounded-2xl shadow-lg hover:shadow-xl transition transform active:scale-95 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-mouse-pointer text-xl"></i> Main Tetikus / Sentuh
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-500 font-semibold mt-6">
+                Direka khas untuk Murid Pendidikan Islam Tahun 4 • <span class="text-emerald-700 font-bold">Ciptaan Ustazah Nisrin</span>
+            </p>
+        </main>
+
+        <!-- GAMEPLAY SCREEN -->
+        <main id="game-screen" class="hidden w-full max-w-4xl mx-auto flex-1 flex flex-col justify-center items-center my-auto py-4">
+            
+            <!-- Question Box -->
+            <div id="question-card" class="w-full glass-panel rounded-3xl p-5 md:p-6 text-center shadow-xl mb-6 relative border-l-8 border-emerald-500">
+                <span id="question-badge" class="bg-emerald-100 text-emerald-800 font-bold text-xs px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">
+                    Soalan 1 / 10
+                </span>
+                <h3 id="question-text" class="text-xl md:text-3xl font-extrabold text-slate-800 leading-relaxed">
+                    Siapakah Rasul <span class="text-emerald-600 underline decoration-wavy">SELEPAS</span> Nabi Adam a.s.?
+                </h3>
+            </div>
+
+            <!-- Answer Cards Grid / Options Container -->
+            <div id="options-container" class="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+                <!-- Cards dynamically populated via JS -->
+            </div>
+            
+            <!-- Visual Feedback Banner -->
+            <div id="feedback-banner" class="opacity-0 transition-opacity duration-300 mt-4 px-6 py-2 rounded-full font-bold text-white text-center shadow-lg">
+                Sangat Cemerlang!
+            </div>
+        </main>
+
+        <!-- RESULT SCREEN / GAME OVER -->
+        <main id="result-screen" class="hidden w-full max-w-3xl mx-auto glass-panel rounded-3xl p-6 md:p-8 my-auto text-center shadow-2xl flex flex-col items-center">
+            <div id="result-icon" class="w-20 h-20 bg-amber-400/20 text-amber-500 rounded-full flex items-center justify-center mb-3">
+                <i class="fa-solid fa-trophy text-4xl"></i>
+            </div>
+            
+            <h2 id="result-title" class="text-3xl font-extrabold text-slate-800">Tahniah! Misi Selesai</h2>
+            <p id="result-subtitle" class="text-slate-600 text-sm mb-4">Anda telah berjaya menyelesaikan tugasan susunan Rasul!</p>
+
+            <!-- Score Cards -->
+            <div class="grid grid-cols-2 gap-4 w-full max-w-md mb-6">
+                <div class="bg-emerald-50/90 border border-emerald-200 p-4 rounded-2xl">
+                    <p class="text-xs text-slate-500 font-semibold">Jumlah Skor</p>
+                    <p id="final-score" class="text-3xl font-black text-emerald-600">0</p>
+                </div>
+                <div class="bg-blue-50/90 border border-blue-200 p-4 rounded-2xl">
+                    <p class="text-xs text-slate-500 font-semibold">Tepat / Soalan</p>
+                    <p id="final-accuracy" class="text-3xl font-black text-blue-600">0/10</p>
+                </div>
+            </div>
+
+            <!-- 25 Rasul Reference List for Revision -->
+            <div class="w-full bg-white/80 rounded-2xl p-4 border border-slate-200 mb-6 text-left max-h-44 overflow-y-auto shadow-inner">
+                <p class="font-bold text-slate-800 text-xs mb-2 flex items-center gap-1.5">
+                    <i class="fa-solid fa-list-ol text-emerald-600"></i> Rujukan Urutan 25 Rasul Sah:
+                </p>
+                <ol id="rasul-reference-list" class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-semibold text-slate-700">
+                    <!-- Populated dynamically -->
+                </ol>
+            </div>
+
+            <button id="btn-restart" class="interactive-btn w-full max-w-md bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-3.5 rounded-2xl shadow-lg hover:shadow-xl transition transform active:scale-95 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-rotate-right text-lg"></i> Main Semula
+            </button>
+        </main>
+
+        <!-- FOOTER CREDITS -->
+        <footer class="w-full text-center text-xs text-slate-200 drop-shadow py-2 font-medium">
+            Misi 4: Susunan 25 Nama Rasul • Pendidikan Islam Tahun 4 • <strong class="text-emerald-300">Ciptaan Ustazah Nisrin</strong>
+        </footer>
+    </div>
+
+    <!-- SOUND SYNTHESIZER & GAME LOGIC CODE -->
+    <script>
+        /**
+         * SYNTHETIC AUDIO ENGINE (Web Audio API)
+         * Generates clean interactive sound effects without external MP3 dependencies.
+         */
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playCorrect() {
+                this.init();
+                const now = this.ctx.currentTime;
+                
+                // Happy two-tone chime
+                const osc1 = this.ctx.createOscillator();
+                const osc2 = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc1.type = 'sine';
+                osc2.type = 'triangle';
+
+                osc1.frequency.setValueAtTime(523.25, now); // C5
+                osc1.frequency.exponentialRampToValueAtTime(659.25, now + 0.15); // E5
+                osc1.frequency.exponentialRampToValueAtTime(783.99, now + 0.3); // G5
+
+                osc2.frequency.setValueAtTime(261.63, now);
+                osc2.frequency.exponentialRampToValueAtTime(392.00, now + 0.3);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc1.start(now);
+                osc2.start(now);
+                osc1.stop(now + 0.4);
+                osc2.stop(now + 0.4);
+            }
+
+            playWrong() {
+                this.init();
+                const now = this.ctx.currentTime;
+                
+                // Low error buzz
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(160, now);
+                osc.frequency.linearRampToValueAtTime(110, now + 0.35);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.35);
+            }
+
+            playClick() {
+                this.init();
+                const now = this.ctx.currentTime;
+                
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(400, now + 0.05);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.05);
+            }
+
+            playGameOver() {
+                this.init();
+                const now = this.ctx.currentTime;
+                
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.linearRampToValueAtTime(200, now + 0.6);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.6);
+            }
+        }
+
+        const soundFx = new SoundEngine();
+
+        /**
+         * 25 NAMA RASUL DATA (Syllabus Tahun 4)
+         */
+        const PROPHETS = [
+            "Adam", "Idris", "Nuh", "Hud", "Soleh", 
+            "Ibrahim", "Lut", "Ismail", "Ishaq", "Yaakub", 
+            "Yusuf", "Ayyub", "Syuaib", "Musa", "Harun", 
+            "Zulkifli", "Daud", "Sulaiman", "Ilias", "Ilyasa'", 
+            "Yunus", "Zakaria", "Yahya", "Isa", "Muhammad SAW"
+        ];
+
+        // GAME STATE
+        let currentScore = 0;
+        let lives = 3;
+        let timer = 60;
+        let timerInterval = null;
+        let currentQuestionIndex = 0;
+        let totalQuestions = 10;
+        let correctAnswersCount = 0;
+        let questionsList = [];
+        let isCamActive = false;
+
+        // DWELL & PINCH GESTURE STATE
+        let dwellTargetElement = null;
+        let dwellStartTime = null;
+        const DWELL_DURATION = 1000; // 1 second dwell delay
+        let isPinching = false;
+        let lastPinchState = false;
+
+        // DOM ELEMENTS
+        const webcamElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('hand-canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const virtualCursor = document.getElementById('virtual-cursor');
+        const cursorProgress = document.getElementById('cursor-progress');
+        
+        const mainMenu = document.getElementById('main-menu');
+        const gameScreen = document.getElementById('game-screen');
+        const resultScreen = document.getElementById('result-screen');
+        const hud = document.getElementById('hud');
+        
+        const scoreDisplay = document.getElementById('score-display');
+        const timerDisplay = document.getElementById('timer-display');
+        const questionBadge = document.getElementById('question-badge');
+        const questionText = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const feedbackBanner = document.getElementById('feedback-banner');
+
+        /**
+         * GENERATE RANDOMIZED QUESTIONS
+         * Creates a mix of "Rasul Selepas...", "Rasul Sebelum...", and "Urutan Ke-X"
+         */
+        function generateQuestions() {
+            questionsList = [];
+            for (let i = 0; i < totalQuestions; i++) {
+                // Select a random index from 0 to 24
+                const prophetIdx = Math.floor(Math.random() * 25);
+                const qType = Math.floor(Math.random() * 3);
+
+                let questionObj = {};
+
+                if (qType === 0 && prophetIdx < 24) {
+                    // "Selepas" Question
+                    const correctProphet = PROPHETS[prophetIdx + 1];
+                    questionObj = {
+                        text: `Siapakah Rasul SELEPAS Nabi <span class="text-emerald-600 underline decoration-wavy">${PROPHETS[prophetIdx]} a.s.</span>?`,
+                        correct: correctProphet,
+                        options: createOptions(correctProphet)
+                    };
+                } else if (qType === 1 && prophetIdx > 0) {
+                    // "Sebelum" Question
+                    const correctProphet = PROPHETS[prophetIdx - 1];
+                    questionObj = {
+                        text: `Siapakah Rasul SEBELUM Nabi <span class="text-emerald-600 underline decoration-wavy">${PROPHETS[prophetIdx]} a.s.</span>?`,
+                        correct: correctProphet,
+                        options: createOptions(correctProphet)
+                    };
+                } else {
+                    // "Urutan Ke-X" Question
+                    const correctProphet = PROPHETS[prophetIdx];
+                    const orderNum = prophetIdx + 1;
+                    questionObj = {
+                        text: `Siapakah Rasul pada urutan yang <span class="text-emerald-600 underline decoration-wavy">KE-${orderNum}</span>?`,
+                        correct: correctProphet,
+                        options: createOptions(correctProphet)
+                    };
+                }
+                questionsList.push(questionObj);
+            }
+        }
+
+        // Helper to generate 4 option choices containing 1 correct & 3 random wrong options
+        function createOptions(correctName) {
+            const optionsSet = new Set([correctName]);
+            while (optionsSet.size < 4) {
+                const randomProphet = PROPHETS[Math.floor(Math.random() * PROPHETS.length)];
+                optionsSet.add(randomProphet);
+            }
+            return Array.from(optionsSet).sort(() => Math.random() - 0.5);
+        }
+
+        /**
+         * RENDER CURRENT QUESTION
+         */
+        function renderQuestion() {
+            if (currentQuestionIndex >= totalQuestions || lives <= 0) {
+                endGame();
+                return;
+            }
+
+            const qData = questionsList[currentQuestionIndex];
+            questionBadge.textContent = `Soalan ${currentQuestionIndex + 1} / ${totalQuestions}`;
+            questionText.innerHTML = qData.text;
+
+            optionsContainer.innerHTML = '';
+            qData.options.forEach((opt) => {
+                const card = document.createElement('div');
+                card.className = `glass-card interactive-btn p-5 md:p-6 rounded-2xl flex items-center justify-center text-center text-lg md:text-xl font-extrabold text-slate-800 cursor-pointer border-2 border-white/80 shadow-md hover:bg-emerald-50/90`;
+                card.dataset.option = opt;
+                card.innerHTML = `<span>Nabi ${opt} a.s.</span>`;
+                
+                // Add click listener (for mouse/touch fallback)
+                card.addEventListener('click', () => handleAnswerSelect(opt, card));
+                optionsContainer.appendChild(card);
+            });
+        }
+
+        /**
+         * HANDLE ANSWER SELECTION
+         */
+        function handleAnswerSelect(selectedOption, cardElem) {
+            const currentQ = questionsList[currentQuestionIndex];
+            const isCorrect = selectedOption === currentQ.correct;
+
+            // Reset dwell tracking
+            resetDwell();
+
+            if (isCorrect) {
+                soundFx.playCorrect();
+                currentScore += 100 + Math.floor(timer / 2);
+                correctAnswersCount++;
+                scoreDisplay.textContent = currentScore;
+
+                cardElem.classList.add('bg-emerald-400', 'text-white', 'pulse-correct');
+                showFeedback("BETUL! TAHNIAH 🎉", "bg-emerald-500");
+            } else {
+                soundFx.playWrong();
+                lives--;
+                updateLivesDisplay();
+                cardElem.classList.add('bg-red-400', 'text-white', 'animate-shake');
+                showFeedback("JAWAPAN KURANG TEPAT! ❌", "bg-red-500");
+            }
+
+            // Temporarily disable clicks on options
+            const allCards = optionsContainer.querySelectorAll('.glass-card');
+            allCards.forEach(c => c.style.pointerEvents = 'none');
+
+            setTimeout(() => {
+                currentQuestionIndex++;
+                if (lives > 0) {
+                    renderQuestion();
+                } else {
+                    endGame();
+                }
+            }, 1200);
+        }
+
+        function showFeedback(text, bgClass) {
+            feedbackBanner.textContent = text;
+            feedbackBanner.className = `mt-4 px-6 py-2 rounded-full font-bold text-white text-center shadow-lg transition-opacity duration-300 opacity-100 ${bgClass}`;
+            setTimeout(() => {
+                feedbackBanner.classList.add('opacity-0');
+            }, 1000);
+        }
+
+        function updateLivesDisplay() {
+            for (let i = 1; i <= 3; i++) {
+                const heart = document.getElementById(`heart-${i}`);
+                if (i > lives) {
+                    heart.className = "fa-solid fa-heart text-slate-300 text-lg md:text-xl";
+                } else {
+                    heart.className = "fa-solid fa-heart text-red-500 text-lg md:text-xl";
+                }
+            }
+        }
+
+        /**
+         * START & STOP GAME TIMER
+         */
+        function startTimer() {
+            clearInterval(timerInterval);
+            timer = 60;
+            timerDisplay.textContent = timer;
+            
+            timerInterval = setInterval(() => {
+                timer--;
+                timerDisplay.textContent = timer;
+                
+                if (timer <= 0) {
+                    clearInterval(timerInterval);
+                    soundFx.playWrong();
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        /**
+         * START GAME FUNCTION
+         */
+        function startGame(useCam = false) {
+            soundFx.playClick();
+            currentScore = 0;
+            lives = 3;
+            currentQuestionIndex = 0;
+            correctAnswersCount = 0;
+            scoreDisplay.textContent = currentScore;
+            updateLivesDisplay();
+
+            mainMenu.classList.add('hidden');
+            resultScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+            hud.classList.remove('hidden');
+
+            generateQuestions();
+            renderQuestion();
+            startTimer();
+
+            if (useCam) {
+                initCamera();
+                virtualCursor.classList.remove('hidden');
+            } else {
+                virtualCursor.classList.add('hidden');
+            }
+        }
+
+        /**
+         * END GAME FUNCTION
+         */
+        function endGame() {
+            clearInterval(timerInterval);
+            soundFx.playGameOver();
+
+            gameScreen.classList.add('hidden');
+            hud.classList.add('hidden');
+            resultScreen.classList.remove('hidden');
+
+            document.getElementById('final-score').textContent = currentScore;
+            document.getElementById('final-accuracy').textContent = `${correctAnswersCount}/${totalQuestions}`;
+
+            const titleElem = document.getElementById('result-title');
+            if (lives > 0) {
+                titleElem.textContent = "Tahniah! Misi Selesai 🎉";
+                titleElem.className = "text-3xl font-extrabold text-emerald-600";
+            } else {
+                titleElem.textContent = "Cuba Lagi! Misi Gagal 💔";
+                titleElem.className = "text-3xl font-extrabold text-red-600";
+            }
+
+            // Populate 25 Rasul Reference List
+            const refList = document.getElementById('rasul-reference-list');
+            refList.innerHTML = '';
+            PROPHETS.forEach((p, idx) => {
+                const item = document.createElement('li');
+                item.className = "bg-emerald-50/70 p-1.5 rounded border border-emerald-100 flex items-center gap-1";
+                item.innerHTML = `<span class="bg-emerald-600 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">${idx + 1}</span> ${p}`;
+                refList.appendChild(item);
+            });
+        }
+
+        /**
+         * MEDIAPIPE HANDS GESTURE CONTROL & CANVAS OVERLAY
+         */
+        function initCamera() {
+            if (isCamActive) return;
+
+            webcamElement.classList.remove('hidden');
+
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.65,
+                minTrackingConfidence: 0.65
+            });
+
+            hands.onResults(onHandResults);
+
+            const camera = new Camera(webcamElement, {
+                onFrame: async () => {
+                    await hands.send({ image: webcamElement });
+                },
+                width: 1280,
+                height: 720
+            });
+
+            camera.start();
+            isCamActive = true;
+        }
+
+        function onHandResults(results) {
+            // Resize canvas dynamically
+            canvasElement.width = window.innerWidth;
+            canvasElement.height = window.innerHeight;
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+
+                // Draw Landmark Connectors
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#059669', lineWidth: 3 });
+                drawLandmarks(canvasCtx, landmarks, { color: '#34d399', lineWidth: 1, radius: 4 });
+
+                // Index Finger Tip (Landmark 8) & Thumb Tip (Landmark 4)
+                const indexTip = landmarks[8];
+                const thumbTip = landmarks[4];
+
+                // Mirror X for intuitive control
+                const cursorX = (1 - indexTip.x) * window.innerWidth;
+                const cursorY = indexTip.y * window.innerHeight;
+
+                // Move Virtual Cursor
+                virtualCursor.style.left = `${cursorX}px`;
+                virtualCursor.style.top = `${cursorY}px`;
+
+                // Calculate Pinch Distance between Index and Thumb
+                const distance = Math.hypot(
+                    (indexTip.x - thumbTip.x) * window.innerWidth,
+                    (indexTip.y - thumbTip.y) * window.innerHeight
+                );
+
+                isPinching = distance < 45; // Threshold in pixels
+
+                // Handle Hovering & Interaction with UI Elements
+                processGestureInteraction(cursorX, cursorY, isPinching);
+
+            } else {
+                resetDwell();
+            }
+
+            canvasCtx.restore();
+        }
+
+        /**
+         * PROCESS GESTURE HOVER, DWELL & PINCH SELECTION
+         */
+        function processGestureInteraction(x, y, pinching) {
+            // Find element under cursor
+            const hoveredElem = document.elementFromPoint(x, y);
+            const targetButton = hoveredElem ? hoveredElem.closest('.interactive-btn') : null;
+
+            if (targetButton && targetButton.style.pointerEvents !== 'none') {
+                targetButton.classList.add('hovered');
+
+                // PINCH TRIGGER (Immediate action)
+                if (pinching && !lastPinchState) {
+                    soundFx.playClick();
+                    targetButton.click();
+                    resetDwell();
+                    lastPinchState = pinching;
+                    return;
+                }
+
+                // DWELL TRIGGER (1 second hover delay)
+                if (dwellTargetElement !== targetButton) {
+                    dwellTargetElement = targetButton;
+                    dwellStartTime = Date.now();
+                } else {
+                    const elapsed = Date.now() - dwellStartTime;
+                    const progress = Math.min(elapsed / DWELL_DURATION, 1);
+                    
+                    // Update Radial Progress Ring
+                    const dashoffset = 125.6 * (1 - progress);
+                    cursorProgress.style.strokeDashoffset = dashoffset;
+
+                    if (elapsed >= DWELL_DURATION) {
+                        soundFx.playClick();
+                        targetButton.click();
+                        resetDwell();
+                    }
+                }
+            } else {
+                // Clear state when leaving interactive elements
+                document.querySelectorAll('.interactive-btn.hovered').forEach(b => b.classList.remove('hovered'));
+                resetDwell();
+            }
+
+            lastPinchState = pinching;
+        }
+
+        function resetDwell() {
+            dwellTargetElement = null;
+            dwellStartTime = null;
+            cursorProgress.style.strokeDashoffset = 125.6;
+        }
+
+        // EVENT LISTENERS
+        document.getElementById('btn-start-cam').addEventListener('click', () => startGame(true));
+        document.getElementById('btn-start-mouse').addEventListener('click', () => startGame(false));
+        document.getElementById('btn-restart').addEventListener('click', () => startGame(isCamActive));
+
+        // Window Resize Handler
+        window.addEventListener('resize', () => {
+            canvasElement.width = window.innerWidth;
+            canvasElement.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>
